@@ -27,11 +27,19 @@ jobs:
         with:
           flutter-version: '3.x'
 
-      - name: Apply patch and build
+      - name: Apply patch, init git and build
         run: |
           cp bge_dh2.patch tunnel-forge-src/
           cd tunnel-forge-src
-          git apply bge_dh2.patch
+          patch -p1 < bge_dh2.patch
+
+          # Helyi Git repository inicializálása, hogy a Makefile/build ne hibázzon el 128-as kóddal
+          git init
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add .
+          git commit -m "v0.7.4 with bge dh2 patch"
+
           flutter pub get
           cd android/gvisor
           go mod download
