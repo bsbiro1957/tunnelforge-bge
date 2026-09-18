@@ -27,7 +27,7 @@ jobs:
         with:
           flutter-version: '3.x'
 
-      - name: Initialize and apply smart patch fix via Python
+      - name: Initialize and auto-locate/fix ikev1.c via Python
         run: |
           cd tunnel-forge-src
           git init
@@ -39,61 +39,63 @@ jobs:
           python3 -c '
           import os
 
-          patch_path = "../bge_dh2.patch"
-          file_path = "android/app/src/main/cpp/ikev1.c"
+          # Automatikusan megkeressük az ikev1.c fájlt bárhol a mapparendszerben
+          target_file = None
+          for root, dirs, files in os.walk("."):
+              if "ikev1.c" in files:
+                  target_file = os.path.join(root, "ikev1.c")
+                  break
 
-          old_target = "0x00, 0x00, 0x00, 0x00,"
-          new_target = "0x4f,0xe1,0x35,0x6d,0x6d,0x51,0xc2,0x45,"
+          if not target_file:
+              print("Hiba: Az ikev1.c fájl nem található a repóban!")
+              exit(1)
 
-          # Megpróbáljuk kiolvasni a patch fájlból a mintát, ha létezik
-          if os.path.exists(patch_path):
-              with open(patch_path, "r", encoding="utf-8", errors="ignore") as f:
-                  patch_content = f.read()
-              lines = patch_content.splitlines()
-              for i, line in enumerate(lines):
-                  if "ikev1.c" in line:
-                      for j in range(i+1, min(i+15, len(lines))):
-                          if lines[j].startswith("-    0x") or lines[j].startswith("-0x"):
-                              old_target = lines[j][1:].strip()
-                          elif lines[j].startswith("+    0x") or lines[j].startswith("+0x"):
-                              new_target = lines[j][1:].strip()
+          print(f"Megtalált fájl pontos helye: {target_file}")
 
-          print(f"Keresett minta: {old_target}")
-          print(f"Cserélve erre: {new_target}")
+          with open(target_file, "r", encoding="utf-8", errors="ignore") as f:
+              content = f.read()
 
-          with open(file_path, "r", encoding="utf-8") as f:
-              file_lines = f.readlines()
-
-          new_file_lines = []
           replaced = False
-          
-          # Elsődleges próbálkozás: rugalmas szóköz-független egyezés
-          for line in file_lines:
-              if old_target.replace(" ", "") in line.replace(" ", ""):
-                  indent = line[:line.index("0x")] if "0x" in line else "    "
-                  new_file_lines.append(indent + new_target + "\n")
-                  replaced = True
-              else:
-                  new_file_lines.append(line)
+          patterns_to_replace = [
+              "0x00, 0x00, 0x00, 0x00,",
+              "0x00,0x00,0x00,0x00,",
+              "0x00, 0x00, 0x00, 0x00",
+              "0x00,0x00,0x00,0x00"
+          ]
+          new_code = "0x4f, 0xe1, 0x35, 0x6d, 0x6d, 0x51, 0xc2, 0x45,"
 
-          # Ha elsőre nem ment, univerzális keresés a nullás tömbre
+          for p in patterns_to_replace:
+              if p in content:
+                  content = content.replace(p, new_code)
+                  replaced = True
+                  print(f"Sikeres csere ezzel a mintával: {p}")
+                  break
+
+          # Ha nem talált pontos egyezést, soronként keresünk nullás tömböt
           if not replaced:
-              print("Figyelem: Másodlagos univerzális keresés indítása...")
-              new_file_lines = []
-              for line in file_lines:
-                  if "0x00,0x00,0x00,0x00" in line.replace(" ", ""):
-                      indent = line[:line.index("0x")] if "0x" in line else "    "
-                      new_file_lines.append(indent + new_target + "\n")
+              lines = content.splitlines()
+              new_lines = []
+              for line in lines:
+                  if "0x00" in line and not replaced:
+                      indent = ""
+                      for char in line:
+                          if char in " \t":
+                              indent += char
+                          else:
+                              break
+                      new_lines.append(indent + new_code + "\n")
                       replaced = True
+                      print(f"Sor alapú csere végrehajtva ezen: {line.strip()}")
                   else:
-                      new_file_lines.append(line)
+                      new_lines.append(line + "\n")
+              content = "".join(new_lines)
 
           if replaced:
-              with open(file_path, "w", encoding="utf-8") as f:
-                  f.writelines(new_file_lines)
+              with open(target_file, "w", encoding="utf-8") as f:
+                  f.write(content)
               print("Siker: Az ikev1.c sikeresen frissítve!")
           else:
-              print("Hiba: A cél sor teljesen hiányzik az ikev1.c-ből!")
+              print("Hiba: Nem találtam cserélhető tömböt az ikev1.c-ben!")
               exit(1)
           '
 
