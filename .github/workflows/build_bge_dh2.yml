@@ -27,7 +27,7 @@ jobs:
         with:
           flutter-version: '3.x'
 
-      - name: Initialize and apply direct fix
+      - name: Diagnostic and Smart Patch Application
         run: |
           cd tunnel-forge-src
           git init
@@ -37,20 +37,77 @@ jobs:
           git commit -m "Initial v0.7.4 source"
 
           python3 -c '
-          file_path = "android/app/src/main/cpp/ikev1.c"
-          with open(file_path, "r", encoding="utf-8") as f:
-              content = f.read()
+          import os
 
-          old_code = "    0x00, 0x00, 0x00, 0x00,"
-          new_code = "    0x4f,0xe1,0x35,0x6d,0x6d,0x51,0xc2,0x45,"
-
-          if old_code in content:
-              content = content.replace(old_code, new_code)
-              with open(file_path, "w", encoding="utf-8") as f:
-                  f.write(content)
-              print("Siker: Az ikev1.c frissítve.")
+          print("=== PATCH FÁJL TARTALMA ===")
+          if os.path.exists("../bge_dh2.patch"):
+              with open("../bge_dh2.patch", "r", encoding="utf-8", errors="ignore") as f:
+                  print(f.read())
           else:
-              print("Hiba: A keresett sor nem található az ikev1.c-ben!")
+              print("A ../bge_dh2.patch nem található!")
+
+          # Megkeressük az összes .c fájlt, amiben szerepelhet a kulcs
+          target_file = None
+          for root, dirs, files in os.walk("."):
+              for file in files:
+                  if file.endswith(".c"):
+                      file_path = os.path.join(root, file)
+                      with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                          content = f.read()
+                      if "0x00" in content and ("ikev" in file.lower() or "dh" in file.lower() or "crypto" in file.lower() or "ike" in content.lower()):
+                          target_file = file_path
+                          print(f"Potenciális célpont találva: {target_file}")
+                          break
+              if target_file:
+                  break
+
+          # Ha így sem lenne meg, keressük kifejezetten az ikev1.c-t
+          if not target_file:
+              for root, dirs, files in os.walk("."):
+                  if "ikev1.c" in files:
+                      target_file = os.path.join(root, "ikev1.c")
+                      break
+
+          if not target_file or not os.path.exists(target_file):
+              print("Hiba: Nem található megfelelő C forrásfájl a módosításhoz!")
+              exit(1)
+
+          print(f"Kiválasztott fájl szerkesztésre: {target_file}")
+
+          with open(target_file, "r", encoding="utf-8", errors="ignore") as f:
+              lines = f.readlines()
+
+          new_lines = []
+          replaced = False
+          new_code = "    0x4f, 0xe1, 0x35, 0x6d, 0x6d, 0x51, 0xc2, 0x45,\n"
+
+          for line in lines:
+              # Rugalmasan keressük a nullás tömböket soron belül
+              stripped_clean = line.replace(" ", "").replace("\t", "")
+              if "0x00,0x00,0x00,0x00" in stripped_clean and not replaced:
+                  # Megtartjuk az eredeti behúzást
+                  indent = ""
+                  for char in line:
+                      if char in " \t":
+                          indent += char
+                      else:
+                          break
+                  new_lines.append(indent + new_code.strip() + "\n")
+                  replaced = True
+                  print(f"Sikeresen cserélve ezen a soron: {line.strip()}")
+              else:
+                  new_lines.append(line)
+
+          if replaced:
+              with open(target_file, "w", encoding="utf-8") as f:
+                  f.writelines(new_lines)
+              print("Siker: A fájl sikeresen frissítve!")
+          else:
+              print("Hiba: Nem találtunk cserélhető nullás tömböt a fájlban!")
+              # Kiírjuk a fájl első 100 sorát debug céllal
+              print("--- Fájl eleje ---")
+              for i, l in enumerate(lines[:100]):
+                  print(f"{i+1}: {l.rstrip()}")
               exit(1)
           '
 
