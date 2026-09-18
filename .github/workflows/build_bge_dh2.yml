@@ -49,19 +49,14 @@ jobs:
           with open(target_file, "r", encoding="utf-8", errors="ignore") as f:
               content = f.read()
 
-          # Ellenőrizzük, hogy létezik-e a rfc3526_modp2048_p tömb
           if "rfc3526_modp2048_p" in content:
               print("A rfc3526_modp2048_p tömb megtalálva, frissítés folyamatban...")
-              
-              # Biztonságos karakterlánc-csere a BGE DH2 módosításhoz
-              # Ha találunk nullás tömböt vagy a cserélendő mintát, felülírjuk
               if "0x00, 0x00, 0x00, 0x00," in content:
                   content = content.replace("0x00, 0x00, 0x00, 0x00,", "0x4f, 0xe1, 0x35, 0x6d, 0x6d, 0x51, 0xc2, 0x45,")
               else:
-                  # Alternatív közvetlen sorcsere, ha a tömb már tartalmaz adatokat
                   content = content.replace(
                       "0x2b, 0x0a, 0x6d, 0xf2, 0x5f, 0x14, 0x37,", 
-                      "0x2b, 0x0a, 0x6d, 0xf2, 0x5f, 0x14, 0x37, 0x4f, 0xe1, 0x35, 0x6d, 0x6d, 0x51, 0xc2, 0x45, e4, 0x85, 0xb5, 0x76,"
+                      "0x2b, 0x0a, 0x6d, 0xf2, 0x5f, 0x14, 0x37, 0x4f, 0xe1, 0x35, 0x6d, 0x6d, 0x51, 0xc2, 0x45, 0xe4, 0x85, 0xb5, 0x76,"
                   )
 
           with open(target_file, "w", encoding="utf-8") as f:
@@ -77,7 +72,9 @@ jobs:
           cd android/gvisor
           go mod download
           cd ../..
-          make build-debug
+          
+          # Hozzáadtuk aGradle verzióellenőrzés kihagyását bypassoló kapcsolót
+          flutter build apk --debug --android-skip-build-dependency-validation
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
