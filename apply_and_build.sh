@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-git checkout #
 git apply bge_dh2.patch
 flutter pub get
 cd android/gvisor
