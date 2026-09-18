@@ -27,18 +27,24 @@ jobs:
         with:
           flutter-version: '3.x'
 
-      - name: Apply patch, init git and build
+      - name: Apply patch safely and build
         run: |
-          cp bge_dh2.patch tunnel-forge-src/
           cd tunnel-forge-src
-          patch -p1 < bge_dh2.patch
-
-          # Helyi Git repository inicializálása, hogy a Makefile/build ne hibázzon el 128-as kóddal
+          
+          # Ha a patch parancs nem boldogul a formátummal, itt próbáljuk meg alternatív módon,
+          # vagy engedjük, hogy a git alkalmazza a patch-et, miután inicializáltuk a repót.
           git init
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
           git add .
-          git commit -m "v0.7.4 with bge dh2 patch"
+          git commit -m "Initial v0.7.4 source"
+
+          # Helyes sorvégekkel ellátjuk és megpróbáljuk git apply-val is
+          tr -d '\r' < ../bge_dh2.patch > bge_dh2.patch
+          git apply bge_dh2.patch || patch -p1 --binary < bge_dh2.patch
+
+          git add .
+          git commit -m "Applied BGE DH2 patch"
 
           flutter pub get
           cd android/gvisor
