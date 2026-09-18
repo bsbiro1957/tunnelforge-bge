@@ -27,21 +27,28 @@ jobs:
         with:
           flutter-version: '3.x'
 
-      - name: Apply patch safely and build
+      - name: Clean patch and build
         run: |
           cd tunnel-forge-src
-          
-          # Ha a patch parancs nem boldogul a formátummal, itt próbáljuk meg alternatív módon,
-          # vagy engedjük, hogy a git alkalmazza a patch-et, miután inicializáltuk a repót.
           git init
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
           git add .
           git commit -m "Initial v0.7.4 source"
 
-          # Helyes sorvégekkel ellátjuk és megpróbáljuk git apply-val is
-          tr -d '\r' < ../bge_dh2.patch > bge_dh2.patch
-          git apply bge_dh2.patch || patch -p1 --binary < bge_dh2.patch
+          # Python alapú tisztítás a malformed sorok és sorvégek javítására
+          python3 -c "
+          with open('../bge_dh2.patch', 'r', encoding='utf-8', errors='ignore') as f:
+              content = f.read()
+          
+          # Sorvégek egységesítése és felesleges szóközök eltávolítása a sorok végéről
+          cleaned_lines = [line.rstrip() + '\n' for line in content.splitlines()]
+          
+          with open('clean.patch', 'w', encoding='utf-8') as f:
+              f.writelines(cleaned_lines)
+          "
+
+          patch -p1 --binary < clean.patch
 
           git add .
           git commit -m "Applied BGE DH2 patch"
